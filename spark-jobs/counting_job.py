@@ -26,6 +26,11 @@ if __name__ == '__main__':
 
 		analysis = []
 		analysis.append((game.headers['Result'], 1))
+
+		board = game.board()
+		for move in first_game.mainline_moves():
+			board.push(move)
+
 		return analysis
 
 	res = text_file.map(fix_record).flatmap(analyze_game).reduceByKey(lambda a,b : a + b)
