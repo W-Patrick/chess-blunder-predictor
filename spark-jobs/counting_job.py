@@ -1,7 +1,38 @@
 import sys
-from pyspark import SparkContext
+from pyspark import SparkContext, AccumulatorParam
 import chess.pgn
 import io
+import math
+import logging
+
+# class created to accumulate counts of
+# dynamic names, for example this will
+# help us count how much of each time format
+# we have in the dataset without actually
+# knowing what all the time formats are
+class DictAccumulator(AccumulatorParam):	
+	def zero(self, initialValue):
+		return initialValue
+	
+	def addInPlace(self, v1, v2):	
+		for k in v2:
+			if k not in v1:
+				v1[k] = 0
+			
+			v1[k] += v2[k]
+
+		return v1
+
+
+def round_elo(elo):
+	return math.floor(elo / 100.0) * 100
+
+WHITE_ELO = 'WhiteElo'
+BLACK_ELO = 'BlackElo'
+TIME_CONTROL = 'TimeControl'
+TERMINATION = 'Termination'
+VARIANT = 'Variant'
+EVAL = 'eval'
 
 if __name__ == '__main__':
 	input_dir = sys.argv[1]
@@ -9,7 +40,53 @@ if __name__ == '__main__':
 
 	sc = SparkContext(appName="PgnCount")
 	sc._jsc.hadoopConfiguration().set("textinputformat.record.delimiter", "\n\n[Event")
+
 	text_file = sc.textFile(input_dir)
+
+	# accumulators
+	time_control_counts = sc.accumulator({}, DictAccumulator())
+	elo_counts = sc.accumulator({}, DictAccumulator())
+	termination_counts = sc.accumulator({}, DictAccumulator())
+	variant_counts = sc.accumulator({}, DictAccumulator())
+	eval_counts = sc.accumulator({}, DictAccumulator())
+
+	def analyze_game(record):
+		pgn = io.StringIO(record)
+		game = chess.pgn.read_game(pgn)
+
+		if WHITE_ELO in game.headers:
+			try:
+				white_elo = round_elo(int(game.headers[WHITE_ELO]))
+				elo_counts.add({white_elo: 1})
+			except Exception:
+				elo_counts.add({game.headers[WHITE_ELO]: 1})
+
+		if BLACK_ELO in game.headers:
+			try:
+				black_elo = round_elo(int(game.headers[BLACK_ELO]))
+				elo_counts.add({black_elo: 1})
+			except Exception:
+				elo_counts.add({game.headers[BLACK_ELO]: 1})
+
+		if TIME_CONTROL in game.headers:
+			time_control = game.headers[TIME_CONTROL]
+			time_control_counts.add({time_control: 1})
+
+		if TERMINATION in game.headers:
+			termination = game.headers[TERMINATION]
+			termination_counts.add({termination: 1})
+
+		if VARIANT in game.headers:
+			variant = game.headers[VARIANT]
+			variant_counts.add({variant: 1})
+
+		if len(game.variations) > 0:
+			comment = game.variations[0].comment
+
+			# game has engine evaluation
+			if '%eval' in comment:
+				eval_counts.add({EVAL: 1})
+				eval_counts.add({EVAL + '-' + time_control: 1})
 
 	# we need to use \n\n[Event as our delimiter because of PGN's specific format
 	# then we need to fix the records so that an individual game is a single record
@@ -20,18 +97,12 @@ if __name__ == '__main__':
 		else:
 			return ''.join(['[Event', record, '\n'])
 
-	def analyze_game(record):
-		pgn = io.StringIO(record)
-		game = chess.pgn.read_game(pgn)
+	res = text_file.map(fix_record)
+	res.foreach(analyze_game)
 
-		analysis = []
-		analysis.append((game.headers['Result'], 1))
-
-		board = game.board()
-		for move in first_game.mainline_moves():
-			board.push(move)
-
-		return analysis
-
-	res = text_file.map(fix_record).flatmap(analyze_game).reduceByKey(lambda a,b : a + b)
-	res.saveAsTextFile(output_dir)
+	sc.parallelize(
+		[('Elo Counts:', elo_counts.__str__()),
+		 ('Time Control Counts', time_control_counts.__str__()),
+		 ('Termination:', termination_counts.__str__()), 
+		 ('Eval Counts:', eval_counts.__str__()), 
+		 ('Variant Counts:', variant_counts.__str__())], 1).saveAsTextFile(output_dir)
