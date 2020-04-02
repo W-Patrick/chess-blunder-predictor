@@ -50,6 +50,9 @@ if __name__ == '__main__':
 	variant_counts = sc.accumulator({}, DictAccumulator())
 	eval_counts = sc.accumulator({}, DictAccumulator())
 
+	records_analyzed = 0
+	batch_size = 10
+
 	def analyze_game(record):
 		pgn = io.StringIO(record)
 		game = chess.pgn.read_game(pgn)
@@ -95,6 +98,12 @@ if __name__ == '__main__':
 
 				if BLACK_ELO in game.headers:
 					eval_counts.add({EVAL + '-' + str(black_elo): 1})
+
+		global records_analyzed
+		global batch_size
+		records_analyzed += 1
+		if records_analyzed % batch_size == 0:
+			print('Number of records processed: {}'.format(records_analyzed))
 
 	# we need to use \n\n[Event as our delimiter because of PGN's specific format
 	# then we need to fix the records so that an individual game is a single record

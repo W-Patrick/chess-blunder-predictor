@@ -12,7 +12,7 @@ aws.bucket.name=pwalanki-blunder-predictor-data
 aws.input=input
 aws.output=output
 aws.log.dir=log
-aws.num.nodes=2
+aws.num.nodes=8
 aws.instance.type=m4.large
 
 clean-local-output:
