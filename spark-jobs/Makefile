@@ -40,7 +40,7 @@ download-output-aws: clean-local-output
 	mkdir ${output.dir}
 	aws s3 sync s3://${aws.bucket.name}/${aws.output} ${output.dir}
 
-aws: upload-app delete-output-aws
+aws: upload-app upload-bootstrap delete-output-aws
 	aws emr create-cluster \
 		--name "Counting Job Spark Cluster" \
 		--release-label ${aws.emr.release} \
