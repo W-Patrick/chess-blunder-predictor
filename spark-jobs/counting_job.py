@@ -100,9 +100,16 @@ if __name__ == '__main__':
 	res = text_file.map(fix_record)
 	res.foreach(analyze_game)
 
-	sc.parallelize(
-		[('Elo Counts:', elo_counts.__str__()),
-		 ('Time Control Counts', time_control_counts.__str__()),
-		 ('Termination:', termination_counts.__str__()), 
-		 ('Eval Counts:', eval_counts.__str__()), 
-		 ('Variant Counts:', variant_counts.__str__())], 1).saveAsTextFile(output_dir)
+	def transform_counter(name, counter, result):
+		result.append(','.join([name, 'Count']))
+		for k in counter.value:
+			result.append(','.join([str(k), str(counter.value[k])]))
+			
+	csv_lines = []
+	transform_counter('Elo', elo_counts, csv_lines)
+	transform_counter('TimeControl', time_control_counts, csv_lines)
+	transform_counter('Termination', termination_counts, csv_lines)
+	transform_counter('Eval', eval_counts, csv_lines)
+	transform_counter('Variant', variant_counts, csv_lines)
+
+	sc.parallelize(csv_lines).saveAsTextFile(output_dir)
