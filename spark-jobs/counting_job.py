@@ -59,6 +59,7 @@ if __name__ == '__main__':
 				white_elo = round_elo(int(game.headers[WHITE_ELO]))
 				elo_counts.add({white_elo: 1})
 			except Exception:
+				white_elo = game.headers[WHITE_ELO]
 				elo_counts.add({game.headers[WHITE_ELO]: 1})
 
 		if BLACK_ELO in game.headers:
@@ -66,6 +67,7 @@ if __name__ == '__main__':
 				black_elo = round_elo(int(game.headers[BLACK_ELO]))
 				elo_counts.add({black_elo: 1})
 			except Exception:
+				black_elo = game.headers[BLACK_ELO]
 				elo_counts.add({game.headers[BLACK_ELO]: 1})
 
 		if TIME_CONTROL in game.headers:
@@ -88,6 +90,12 @@ if __name__ == '__main__':
 				eval_counts.add({EVAL: 1})
 				eval_counts.add({EVAL + '-' + time_control: 1})
 
+				if WHITE_ELO in game.headers:
+					eval_counts.add({EVAL + '-' + str(white_elo): 1})
+
+				if BLACK_ELO in game.headers:
+					eval_counts.add({EVAL + '-' + str(black_elo): 1})
+
 	# we need to use \n\n[Event as our delimiter because of PGN's specific format
 	# then we need to fix the records so that an individual game is a single record
 	# that a mapper processes
@@ -104,12 +112,14 @@ if __name__ == '__main__':
 		result.append(','.join([name, 'Count']))
 		for k in counter.value:
 			result.append(','.join([str(k), str(counter.value[k])]))
-			
-	csv_lines = []
-	transform_counter('Elo', elo_counts, csv_lines)
-	transform_counter('TimeControl', time_control_counts, csv_lines)
-	transform_counter('Termination', termination_counts, csv_lines)
-	transform_counter('Eval', eval_counts, csv_lines)
-	transform_counter('Variant', variant_counts, csv_lines)
 
-	sc.parallelize(csv_lines).saveAsTextFile(output_dir)
+	def transform_counter_to_csv():
+		csv_lines = []
+		transform_counter('Elo', elo_counts, csv_lines)
+		transform_counter('TimeControl', time_control_counts, csv_lines)
+		transform_counter('Termination', termination_counts, csv_lines)
+		transform_counter('Eval', eval_counts, csv_lines)
+		transform_counter('Variant', variant_counts, csv_lines)
+		return csv_lines
+
+	sc.parallelize(transform_counter_to_csv(), 1).saveAsTextFile(output_dir)
