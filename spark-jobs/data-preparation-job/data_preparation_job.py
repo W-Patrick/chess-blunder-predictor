@@ -153,36 +153,33 @@ if __name__ == '__main__':
 		dataset = []
 
 		# loop through the mainline of the game
-		prev_node = None
 		board = game.board()
 
 		for node in game.mainline():
-			if not prev_node is None:
-				# get previous positions turn
-				turn = board.turn
+			# get previous positions turn
+			turn = board.turn
 
-				# get the previous turns elo
-				elo = white_elo if turn else black_elo
+			# get the previous turns elo
+			elo = white_elo if turn else black_elo
 
-				if elo in VALID_ELOS:
+			if elo in VALID_ELOS:
 
-					clock_time = get_clock_time_in_seconds(prev_node.comment)
-					# was there enough time on the clock?
-					if clock_time >= CLOCK_CUTOFF:
+				clock_time = get_clock_time_in_seconds(node.comment)
+				# was there enough time on the clock?
+				if clock_time >= CLOCK_CUTOFF:
 
-						# get the position as a one hot encoding
-						position = get_one_hot_encoding_of_board(board)
+					# get the position as a one hot encoding
+					position = get_one_hot_encoding_of_board(board)
 
-						if chess.pgn.NAG_BLUNDER in node.nags:
-							blunder = 1
-						else:
-							blunder = 0
+					if chess.pgn.NAG_BLUNDER in node.nags:
+						blunder = 1
+					else:
+						blunder = 0
 
-						data = (position, int(turn), normalize_elo(elo), blunder)
-						dataset.append(data)
+					data = (position, int(turn), normalize_elo(elo), blunder)
+					dataset.append(data)
 
 			board.push(node.move)
-			prev_node = node
 
 		return dataset
 
