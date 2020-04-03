@@ -1,10 +1,13 @@
 import sys
 from pyspark import SparkContext, AccumulatorParam
+from pyspark.sql import SQLContext
 import io
 import math
 import datetime
-
+import numpy as np
 import chess.pgn
+
+import tensorflow as tf
 
 
 def round_elo(elo):
@@ -81,23 +84,6 @@ TIME_FORMAT_CUTOFF = 600
 # all moves played with less than this amount of time will not be considered
 CLOCK_CUTOFF = 120
 
-###
-#
-# Outputs: 
-#   position with one hot encoding
-#   1 for whites turn, 0 for blacks turn
-#   1500 - 2200 normalized 
-#
-###
-
-###
-#
-# Filter on:
-#	include only games with a time format of 10 minutes or greater
-#   exclude moves where there was less than 2 minutes on the clock
-#   
-#
-###
 
 if __name__ == '__main__':
 	input_dir = sys.argv[1]
@@ -105,6 +91,8 @@ if __name__ == '__main__':
 
 	sc = SparkContext(appName="PgnCount")
 	sc._jsc.hadoopConfiguration().set("textinputformat.record.delimiter", "\n\n[Event")
+
+	sqlContext = SQLContext(sc)
 
 	# we need to use \n\n[Event as our delimiter because of PGN's specific format
 	# then we need to fix the records so that an individual game is a single record
@@ -170,7 +158,8 @@ if __name__ == '__main__':
 
 					# get the position as a one hot encoding
 					position = get_one_hot_encoding_of_board(board)
-
+					position = str(np.array(position).tobytes())
+	
 					if chess.pgn.NAG_BLUNDER in node.nags:
 						blunder = 1
 					else:
@@ -184,4 +173,11 @@ if __name__ == '__main__':
 		return dataset
 
 	text_file = sc.textFile(input_dir)
-	res = text_file.map(fix_record).flatMap(label_game).saveAsTextFile(output_dir)
+	res = text_file.map(fix_record).flatMap(label_game)
+
+	res.saveAsTextFile(output_dir)
+
+	df = sqlContext.createDataFrame(res, ['position', 'turn', 'elo', 'label'])
+	df.show()
+
+	df.write.format("tfrecords").mode("overwrite").save(output_dir)
