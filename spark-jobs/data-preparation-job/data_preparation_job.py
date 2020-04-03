@@ -80,7 +80,7 @@ VALID_ELOS = set(range(MIN_ELO, MAX_ELO + 100, 100))
 TIME_FORMAT_CUTOFF = 600
 
 # all moves played with less than this amount of time will not be considered
-CLOCK_CUTOFF = -1
+CLOCK_CUTOFF = 120
 
 
 if __name__ == '__main__':
@@ -159,7 +159,7 @@ if __name__ == '__main__':
 
 					# get the position as a one hot encoding
 					position = get_one_hot_encoding_of_board(board)
-					position = str(np.array(position).tobytes())
+					position = bytearray(np.array(position).tobytes())
 	
 					if chess.pgn.NAG_BLUNDER in node.nags:
 						blunder = 1
