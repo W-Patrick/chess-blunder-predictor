@@ -2,6 +2,7 @@ import sys
 from pyspark import SparkContext, AccumulatorParam
 import io
 import math
+import datetime
 
 import chess.pgn
 
@@ -12,7 +13,7 @@ def round_elo(elo):
 
 def get_elo_from_str(elo):
 	try:
-		return round_elo(int(game.headers[WHITE_ELO]))
+		return round_elo(int(elo))
 	except Exception:
 		return -1 # -1 will represent an unknown elo
 
@@ -47,8 +48,16 @@ def get_one_hot_encoding_of_board(board):
 
 
 # gets the clock time
-def get_clock_time_in_seconds(clock_time):
+def get_clock_time_in_seconds(comment):
 	pass
+	sp = comment.split('clk')
+	if len(sp) > 1:
+		t = sp[1].strip().strip(']')
+		hours, minutes, seconds = t.split(':')
+		return datetime.timedelta(hours=int(hours), minutes=int(minutes), seconds=int(seconds)).total_seconds()
+	else:
+		return -1 # -1 will represent an unknown clock time
+
 
 WHITE_ELO = 'WhiteElo'
 BLACK_ELO = 'BlackElo'
@@ -96,8 +105,6 @@ if __name__ == '__main__':
 
 	sc = SparkContext(appName="PgnCount")
 	sc._jsc.hadoopConfiguration().set("textinputformat.record.delimiter", "\n\n[Event")
-
-	text_file = sc.textFile(input_dir)
 
 	# we need to use \n\n[Event as our delimiter because of PGN's specific format
 	# then we need to fix the records so that an individual game is a single record
@@ -158,21 +165,26 @@ if __name__ == '__main__':
 				elo = white_elo if turn else black_elo
 
 				if elo in VALID_ELOS:
-					# get the position as a one hot encoding
-					position = get_one_hot_encoding_of_board(board)
 
-					if chess.pgn.NAG_BLUNDER in node.nags:
-						blunder = 1
-					else:
-						blunder = 0
+					clock_time = get_clock_time_in_seconds(prev_node.comment)
+					# was there enough time on the clock?
+					if clock_time >= CLOCK_CUTOFF:
 
-					data = (position, int(turn), normalize_elo(elo), blunder)
-					dataset.append(data)
+						# get the position as a one hot encoding
+						position = get_one_hot_encoding_of_board(board)
+
+						if chess.pgn.NAG_BLUNDER in node.nags:
+							blunder = 1
+						else:
+							blunder = 0
+
+						data = (position, int(turn), normalize_elo(elo), blunder)
+						dataset.append(data)
 
 			board.push(node.move)
 			prev_node = node
 
 		return dataset
 
-
-	res = text_file.map(fix_record).flatmap(label_game)
+	text_file = sc.textFile(input_dir)
+	res = text_file.map(fix_record).flatMap(label_game).saveAsTextFile(output_dir)
