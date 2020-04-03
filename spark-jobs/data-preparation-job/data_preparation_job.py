@@ -7,8 +7,6 @@ import datetime
 import numpy as np
 import chess.pgn
 
-import tensorflow as tf
-
 
 def round_elo(elo):
 	return math.floor(elo / 100.0) * 100
