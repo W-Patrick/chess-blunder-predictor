@@ -80,7 +80,7 @@ VALID_ELOS = set(range(MIN_ELO, MAX_ELO + 100, 100))
 TIME_FORMAT_CUTOFF = 600
 
 # all moves played with less than this amount of time will not be considered
-CLOCK_CUTOFF = 120
+CLOCK_CUTOFF = -1
 
 
 if __name__ == '__main__':
@@ -105,6 +105,9 @@ if __name__ == '__main__':
 		return (WHITE_ELO in game.headers
 			and BLACK_ELO in game.headers
 			and TIME_CONTROL in game.headers)
+
+	records_analyzed = 0
+	batch_size = 10
 
 	# function used to label all the positions in the game
 	def label_game(record):
@@ -167,6 +170,12 @@ if __name__ == '__main__':
 					dataset.append(data)
 
 			board.push(node.move)
+
+		global records_analyzed
+		global batch_size
+		records_analyzed += 1
+		if records_analyzed % batch_size == 0:
+			print('Number of records processed: {}'.format(records_analyzed))
 
 		return dataset
 
