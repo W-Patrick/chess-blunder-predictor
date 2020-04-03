@@ -175,9 +175,5 @@ if __name__ == '__main__':
 	text_file = sc.textFile(input_dir)
 	res = text_file.map(fix_record).flatMap(label_game)
 
-	res.saveAsTextFile(output_dir)
-
 	df = sqlContext.createDataFrame(res, ['position', 'turn', 'elo', 'label'])
-	df.show()
-
 	df.write.format("tfrecords").mode("overwrite").save(output_dir)
