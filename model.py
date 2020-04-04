@@ -2,11 +2,12 @@ import tensorflow as tf
 import numpy as np
 
 
-def model(dataset):
-	feature_columns = []
-	feature_columns.append(tf.feature_column.numeric_column('position', shape=(1, 8, 8, 12), dtype=tf.dtypes.int64))
-	feature_columns.append(tf.feature_column.numeric_column('turn', shape=(1,), dtype=tf.dtypes.int64))
-	feature_columns.append(tf.feature_column.numeric_column('elo', shape=(1,), dtype=tf.dtypes.float32))
+def model(training_data, validation_data):
+	feature_columns = [
+		tf.feature_column.numeric_column('position', shape=(1, 8, 8, 12), dtype=tf.dtypes.int64),
+		tf.feature_column.numeric_column('turn', shape=(1,), dtype=tf.dtypes.int64),
+		tf.feature_column.numeric_column('elo', shape=(1,), dtype=tf.dtypes.float32)
+	]
 
 	model = tf.keras.models.Sequential()
 	model.add(tf.keras.layers.DenseFeatures(feature_columns))
@@ -18,7 +19,7 @@ def model(dataset):
 				  loss='binary_crossentropy',
 				  metrics=["accuracy"])
 
-	model.fit(dataset, epochs=10)
+	model.fit(training_data, validation_data=validation_data, epochs=3)
 	return model
 
 def load_training_data(path):
@@ -59,11 +60,7 @@ if __name__ == '__main__':
 	training_dataset = dataset.take(2000)
 	test_dataset = dataset.skip(2000).take(677)
 
-	model = model(training_dataset)
+	model = model(training_dataset, test_dataset)
 	model.save('my_first_model.model')
 
-	loss, accuracy = model.evaluate(test_dataset, verbose=0)
-	print('LOSS:')
-	print(loss)
-	print('ACCURACY:')
-	print(accuracy)
+	# loss, accuracy = model.evaluate(test_dataset, verbose=0)
