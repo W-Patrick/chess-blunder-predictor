@@ -3,24 +3,22 @@ import numpy as np
 
 
 def model(dataset):
-	model = tf.keras.models.Sequential()
-
 	feature_columns = []
-	feature_columns.append(tf.feature_column.numeric_column('position', shape=(768,), dtype=tf.dtypes.int64))
+	feature_columns.append(tf.feature_column.numeric_column('position', shape=(1, 8, 8, 12), dtype=tf.dtypes.int64))
 	feature_columns.append(tf.feature_column.numeric_column('turn', shape=(1,), dtype=tf.dtypes.int64))
 	feature_columns.append(tf.feature_column.numeric_column('elo', shape=(1,), dtype=tf.dtypes.float32))
 
+	model = tf.keras.models.Sequential()
 	model.add(tf.keras.layers.DenseFeatures(feature_columns))
-	model.add(tf.keras.layers.Flatten())
-	model.add(tf.keras.layers.Dense(2310, activation=tf.nn.relu))
-	model.add(tf.keras.layers.Dense(2310, activation=tf.nn.relu))
-	model.add(tf.keras.layers.Dense(2, activation=tf.nn.softmax))
+	model.add(tf.keras.layers.Dense(1024, activation=tf.nn.relu))
+	model.add(tf.keras.layers.Dense(1024, activation=tf.nn.relu))
+	model.add(tf.keras.layers.Dense(1, activation=tf.nn.sigmoid))
 
 	model.compile(optimizer='adam',
 				  loss='binary_crossentropy',
-				  metrics=['accuracy'])
+				  metrics=["accuracy"])
 
-	model.fit(dataset)
+	model.fit(dataset, epochs=10)
 	return model
 
 def load_training_data(path):
@@ -39,12 +37,13 @@ def _parse_function(raw_data):
 	raw_position = example['position']
 
 	position = tf.io.decode_raw(raw_position, tf.int64)
+	position = tf.reshape(position, tf.stack([8, 8, 12]))
 
 	turn = example['turn']
 	elo = example['elo']
 	label = example['label']
 
-	return dict({'position': [position], 'turn': [turn], 'elo': [elo]}), [label]
+	return dict({'position': [position], 'elo': [elo], 'turn': [turn]}), [label]
 
 
 if __name__ == '__main__':
@@ -53,8 +52,18 @@ if __name__ == '__main__':
 
 	dataset = raw_dataset.map(_parse_function)
 
-	model = model(dataset)
-	model.save('my_first_model.model')
-	
+	# dataset = dataset.shuffle(buffer_size=256)
+	# dataset = dataset.repeat(3)
+	# dataset = dataset.batch(15)
 
-	
+	training_dataset = dataset.take(2000)
+	test_dataset = dataset.skip(2000).take(677)
+
+	model = model(training_dataset)
+	model.save('my_first_model.model')
+
+	loss, accuracy = model.evaluate(test_dataset, verbose=0)
+	print('LOSS:')
+	print(loss)
+	print('ACCURACY:')
+	print(accuracy)
