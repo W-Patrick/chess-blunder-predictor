@@ -19,7 +19,7 @@ def model(training_data, validation_data):
 				  loss='binary_crossentropy',
 				  metrics=["accuracy"])
 
-	model.fit(training_data, validation_data=validation_data, epochs=3)
+	model.fit(training_data, validation_data=validation_data, epochs=10)
 	return model
 
 def load_training_data(path):
@@ -48,19 +48,18 @@ def _parse_function(raw_data):
 
 
 if __name__ == '__main__':
-	filenames = ['part-r-00000', 'part-r-00001']
+	filenames = ['input-medium/part-r-00000']
 	raw_dataset = tf.data.TFRecordDataset(filenames)
 
 	dataset = raw_dataset.map(_parse_function)
 
-	# dataset = dataset.shuffle(buffer_size=256)
-	# dataset = dataset.repeat(3)
-	# dataset = dataset.batch(15)
+	dataset = dataset.shuffle(buffer_size=256).batch(32)
+	
+	raw_validation_set = tf.data.TFRecordDataset('input-medium/part-r-00000')
+	val_ds = raw_validation_set.map(_parse_function)
+	val_ds = dataset.shuffle(buffer_size=256)
 
-	training_dataset = dataset.take(2000)
-	test_dataset = dataset.skip(2000).take(677)
-
-	model = model(training_dataset, test_dataset)
+	model = model(dataset, val_ds)
 	model.save('my_first_model.model')
 
 	# loss, accuracy = model.evaluate(test_dataset, verbose=0)
