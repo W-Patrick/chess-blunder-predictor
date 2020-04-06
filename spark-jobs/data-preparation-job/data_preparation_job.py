@@ -6,6 +6,7 @@ import math
 import datetime
 import numpy as np
 import chess.pgn
+import random
 
 
 def round_elo(elo):
@@ -69,6 +70,8 @@ EVAL = 'eval'
 
 MIN_ELO = 1500
 MAX_ELO = 2200
+
+BALANCE = True
 
 def normalize_elo(elo):
 	return ((elo - MIN_ELO) * 1.0) / (MAX_ELO - MIN_ELO)
@@ -139,7 +142,8 @@ if __name__ == '__main__':
 		if time_allocated < TIME_FORMAT_CUTOFF:
 			return []
 
-		dataset = []
+		blunders = []
+		non_blunders = []
 
 		# loop through the mainline of the game
 		board = game.board()
@@ -162,14 +166,19 @@ if __name__ == '__main__':
 					position = bytearray(np.array(position).tobytes())
 	
 					if chess.pgn.NAG_BLUNDER in node.nags:
-						blunder = 1
+						blunders.append((position, int(turn), normalize_elo(elo), 1))
 					else:
-						blunder = 0
-
-					data = (position, int(turn), normalize_elo(elo), blunder)
-					dataset.append(data)
+						non_blunders.append((position, int(turn), normalize_elo(elo), 0))
 
 			board.push(node.move)
+
+		if BALANCE and len(non_blunders) > len(blunders):
+			num_blunders = len(blunders)
+			included_non_blunders = random.sample(non_blunders, num_blunders)
+
+			dataset = blunders + included_non_blunders
+		else:
+			dataset = blunders + non_blunders
 
 		global records_analyzed
 		global batch_size
