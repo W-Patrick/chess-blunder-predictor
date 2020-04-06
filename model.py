@@ -17,9 +17,9 @@ def model(training_data, validation_data):
 
 	model.compile(optimizer='adam',
 				  loss='binary_crossentropy',
-				  metrics=["accuracy"])
+				  metrics=['accuracy', tf.metrics.Recall(), tf.metrics.Precision()])
 
-	model.fit(training_data, validation_data=validation_data, epochs=10)
+	model.fit(training_data, validation_data=validation_data, epochs=5)
 	return model
 
 def load_training_data(path):
@@ -54,12 +54,20 @@ if __name__ == '__main__':
 	dataset = raw_dataset.map(_parse_function)
 
 	dataset = dataset.shuffle(buffer_size=256).batch(32)
-	
-	raw_validation_set = tf.data.TFRecordDataset('input-medium/part-r-00000')
+
+	raw_validation_set = tf.data.TFRecordDataset('input-medium/part-r-00001')
 	val_ds = raw_validation_set.map(_parse_function)
 	val_ds = dataset.shuffle(buffer_size=256)
+
+	raw_test_dataset = tf.data.TFRecordDataset('input-medium/part-r-00002')
+	test_ds = raw_test_dataset.map(_parse_function)
+	test_ds = dataset.shuffle(buffer_size=256)
 
 	model = model(dataset, val_ds)
 	model.save('my_first_model.model')
 
-	# loss, accuracy = model.evaluate(test_dataset, verbose=0)
+	loss, accuracy, recall, precision = model.evaluate(test_ds, verbose=0)
+	print('Loss: {}'.format(loss))
+	print('Accuracy: {}'.format(accuracy))
+	print('Recall: {}'.format(recall))
+	print('Precision: {}'.format(precision))
