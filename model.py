@@ -4,10 +4,8 @@ import numpy as np
 import argparse
 import time
 
-NAME = 'LARGE-SET-blunder-predictor-100-batch-2-dense-1024-nodes-0.4-dropout-10E-6-learning-rate-{}'.format(int(time.time()))
 
-def model(training_data, validation_data, epochs):
-	tensorboard = TensorBoard(log_dir='C:\\logs\\{}'.format(NAME))
+def model(training_data, validation_data, epochs, callback=None):
 	feature_columns = [
 		tf.feature_column.numeric_column('position', shape=(1, 8, 8, 12), dtype=tf.dtypes.int64),
 		tf.feature_column.numeric_column('turn', shape=(1,), dtype=tf.dtypes.int64),
@@ -31,7 +29,7 @@ def model(training_data, validation_data, epochs):
 	model.fit(training_data,
 			  validation_data=validation_data,
 			  epochs=epochs,
-			  callbacks=[tensorboard])
+			  callbacks=callbacks)
 
 	return model
 
@@ -126,6 +124,8 @@ def parse_args():
 
 	parser.add_argument('--parts', type=str, default='3')
 
+	parser.add_argument('--tensorboard', type=bool, default=False)
+
 	return parser.parse_args()
 
 
@@ -143,12 +143,19 @@ if __name__ == '__main__':
 	val_ds = val_ds.batch(args.batch_size)
 	test_ds = test_ds.batch(args.batch_size)
 
+	if args.tensorboard:
+		name = 'LARGE-SET-blunder-predictor-100-batch-2-dense-1024-nodes-0.4-dropout-10E-6-learning-rate-{}'.format(int(time.time()))
+		tensorboard = TensorBoard(log_dir='C:\\logs\\{}'.format(name))
+		callbacks = [tensorboard]
+	else:
+		callbacks = None
+
 	# create and train the model
-	model = model(train_ds, val_ds, args.epochs)
+	model = model(train_ds, val_ds, args.epochs, callbacks)
 
 	model.summary()
 
 	model.save('blunder-predictor.model')
 
-	# # evaluate model
-	# model.evaluate(test_ds)
+	# evaluate model
+	model.evaluate(test_ds)
