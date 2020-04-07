@@ -4,6 +4,7 @@ import numpy as np
 import argparse
 import time
 import os
+import json
 
 
 def model(training_data, validation_data, dense_layers, num_nodes, epochs, learning_rate, dropout, callback=None):
@@ -73,18 +74,24 @@ def load_datasets(training_data_paths, validation_data_paths, test_data_paths):
 	return train_ds, val_ds, test_ds
 
 
-def download_part(part, s3_url, namespace):
+def load_part(part, s3_url, aws, namespace):
 	part_prefix = 'part-r-'
 	part_suffix = str(part)
 	while len(part_suffix) < 5: part_suffix = '0' + part_suffix
 	part_file = part_prefix + part_suffix
 
 	url = '{}/{}'.format(s3_url, part_file)
-	file_path = tf.keras.utils.get_file('{}.{}'.format(namespace, part_file), url)
+
+	# check if we are on sagemaker
+	if aws:
+		file_path = url
+	else:
+		file_path = tf.keras.utils.get_file('{}.{}'.format(namespace, part_file), url)
+
 	return file_path
 
 
-def load_remote_training_data(s3_url, parts, namespace='main'):
+def load_remote_training_data(s3_url, parts, aws, namespace='main'):
 	if parts < 3:
 		raise ValueError('There must be at least 3 parts in the dataset')
 
@@ -94,15 +101,15 @@ def load_remote_training_data(s3_url, parts, namespace='main'):
 
 	training_data = []
 	for part in test_parts:
-		file_path = download_part(part, s3_url, namespace)
+		file_path = load_part(part, s3_url, aws, namespace)
 		training_data.append(file_path)
 
 	validation_data = []
-	val_file_path = download_part(val_part, s3_url, namespace)
+	val_file_path = load_part(val_part, s3_url, aws, namespace)
 	validation_data.append(val_file_path)
 
 	test_data = []
-	test_file_path = download_part(test_part, s3_url, namespace)
+	test_file_path = load_part(test_part, s3_url, aws, namespace)
 	test_data.append(test_file_path)
 
 	return load_datasets(training_data, validation_data, test_data)
@@ -119,7 +126,7 @@ def load_local_training_data():
 def parse_args():
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument('--local', type=bool, default=False)
+	parser.add_argument('--aws', type=bool, default=False)
 
 	parser.add_argument('--batch-size', type=int, default=1000)
 	parser.add_argument('--epochs', type=int, default=10)
@@ -131,10 +138,10 @@ def parse_args():
 	parser.add_argument('--tensorboard', type=bool, default=False)
 
 	parser.add_argument('--model_dir', type=str)
-	parser.add_argument('--train', type=str)
-
-	parser.add_argument('--current_host', type=str)
-	parser.add_argument('--hosts', type=list)
+	parser.add_argument('--sm-model-dir', type=str, default=os.environ.get('SM_MODEL_DIR') if 'SM_MODEL_DIR' in os.environ else None)
+	parser.add_argument('--train', type=str, default=os.environ.get('SM_CHANNEL_TRAINING') if 'SM_CHANNEL_TRAINING' in os.environ else None)
+	parser.add_argument('--hosts', type=list, default=json.loads(os.environ.get('SM_HOSTS')) if 'SM_HOSTS' in os.environ else None)
+	parser.add_argument('--current-host', type=str, default=os.environ.get('SM_CURRENT_HOST') if 'SM_CURRENT_HOST' in os.environ else None)
 
 	return parser.parse_args()
 
@@ -143,10 +150,7 @@ if __name__ == '__main__':
 	args = parse_args()
 
 	# load all datasets
-	if args.local:
-		train_ds, val_ds, test_ds = load_local_training_data()
-	else:
-		train_ds, val_ds, test_ds = load_remote_training_data(args.train, int(args.parts))
+	train_ds, val_ds, test_ds = load_remote_training_data(args.train, int(args.parts), args.aws)
 
 	# batch the datasets
 	train_ds = train_ds.batch(args.batch_size)
@@ -154,8 +158,8 @@ if __name__ == '__main__':
 	test_ds = test_ds.batch(args.batch_size)
 
 	if args.tensorboard:
-		name = 'LARGE-SET-blunder-predictor-{}-batch-{}-dense-{}-nodes-0.4-dropout-{}-learning-rate-{}'.format(
-			args.batch_size, args.dense_layers, args.num_nodes, args.learning_rate, int(time.time()))
+		name = 'LARGE-SET-blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}'.format(
+			args.batch_size, args.dense_layers, args.num_nodes, args.dropout, args.learning_rate, int(time.time()))
 
 		tensorboard = TensorBoard(log_dir='C:\\logs\\{}'.format(name))
 		callbacks = [tensorboard]
@@ -170,9 +174,9 @@ if __name__ == '__main__':
 
 	model.summary()
 
-	if args.sm_model_dir is not None:
+	if args.model_dir is not None:
 		if args.current_host == args.hosts[0]:
 			model.save(os.path.join(args.sm_model_dir, str(int(time.time()))), 'blunder-predictor.model')
 
-	elif args.sm_model_dir is None:
+	elif args.model_dir is None:
 		model.save('blunder-predictor.model')
