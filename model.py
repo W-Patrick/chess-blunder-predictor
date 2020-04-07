@@ -114,7 +114,7 @@ def parse_args():
 	parser.add_argument('--epochs', type=int, default=5)
 	parser.add_argument('--train', type=str)
 
-	parser.add_argument('--hyperparameters', type=dict, default={'parts': '3'})
+	parser.add_argument('--parts', type=str, default='3')
 
 	return parser.parse_args()
 
@@ -126,7 +126,7 @@ if __name__ == '__main__':
 	if args.train is None:
 		train_ds, val_ds, test_ds = load_local_training_data()
 	else:
-		train_ds, val_ds, test_ds = load_remote_training_data(args.train, int(args.hyperparameters['parts']))
+		train_ds, val_ds, test_ds = load_remote_training_data(args.train, int(args.parts))
 
 	# batch the datasets
 	train_ds = train_ds.batch(args.batch_size)
