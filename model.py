@@ -5,7 +5,7 @@ import argparse
 import time
 
 
-def model(training_data, validation_data, epochs, callback=None):
+def model(training_data, validation_data, dense_layers, num_nodes, epochs, learning_rate, callback=None):
 	feature_columns = [
 		tf.feature_column.numeric_column('position', shape=(1, 8, 8, 12), dtype=tf.dtypes.int64),
 		tf.feature_column.numeric_column('turn', shape=(1,), dtype=tf.dtypes.int64),
@@ -15,14 +15,14 @@ def model(training_data, validation_data, epochs, callback=None):
 	model = tf.keras.models.Sequential()
 	model.add(tf.keras.layers.DenseFeatures(feature_columns))
 
-	model.add(tf.keras.layers.Dense(1024, input_shape=(770,), activation=tf.nn.relu))
-	model.add(tf.keras.layers.Dense(1024, activation=tf.nn.relu))
-	
+	for i in range(dense_layers):
+		model.add(tf.keras.layers.Dense(num_nodes, activation=tf.nn.relu))
+
 	model.add(tf.keras.layers.Dropout(0.2))
 
 	model.add(tf.keras.layers.Dense(1, activation=tf.nn.sigmoid))
 
-	model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=10E-6),
+	model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
 				  loss='binary_crossentropy',
 				  metrics=['accuracy', tf.metrics.Recall(), tf.metrics.Precision()])
 
@@ -118,12 +118,14 @@ def load_local_training_data():
 def parse_args():
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument('--batch-size', type=int, default=32)
-	parser.add_argument('--epochs', type=int, default=5)
-	parser.add_argument('--train', type=str)
-
+	parser.add_argument('--batch-size', type=int, default=1000)
+	parser.add_argument('--epochs', type=int, default=10)
 	parser.add_argument('--parts', type=str, default='3')
+	parser.add_argument('--learning-rate', type=int, default=.00001)
+	parser.add_argument('--dense-layers', type=int, default=2)
+	parser.add_argument('--num-nodes', type=int, default=1024)
 
+	parser.add_argument('--train', type=str)
 	parser.add_argument('--tensorboard', type=bool, default=False)
 
 	return parser.parse_args()
@@ -144,14 +146,16 @@ if __name__ == '__main__':
 	test_ds = test_ds.batch(args.batch_size)
 
 	if args.tensorboard:
-		name = 'LARGE-SET-blunder-predictor-100-batch-2-dense-1024-nodes-0.4-dropout-10E-6-learning-rate-{}'.format(int(time.time()))
+		name = 'LARGE-SET-blunder-predictor-{}-batch-{}-dense-{}-nodes-0.4-dropout-{}-learning-rate-{}'.format(
+			args.batch_size, args.dense_layers, args.num_nodes, args.learning_rate, int(time.time()))
+
 		tensorboard = TensorBoard(log_dir='C:\\logs\\{}'.format(name))
 		callbacks = [tensorboard]
 	else:
 		callbacks = None
 
 	# create and train the model
-	model = model(train_ds, val_ds, args.epochs, callbacks)
+	model = model(train_ds, val_ds, args.dense_layers, args.num_nodes, args.epochs, args.learning_rate, callbacks)
 
 	model.summary()
 
