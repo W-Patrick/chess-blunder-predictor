@@ -1,9 +1,13 @@
 import tensorflow as tf
+from tensorflow.keras.callbacks import TensorBoard
 import numpy as np
 import argparse
+import time
 
+NAME = 'LARGE-SET-blunder-predictor-100-batch-2-dense-1024-nodes-0.4-dropout-10E-6-learning-rate-{}'.format(int(time.time()))
 
 def model(training_data, validation_data, epochs):
+	tensorboard = TensorBoard(log_dir='C:\\logs\\{}'.format(NAME))
 	feature_columns = [
 		tf.feature_column.numeric_column('position', shape=(1, 8, 8, 12), dtype=tf.dtypes.int64),
 		tf.feature_column.numeric_column('turn', shape=(1,), dtype=tf.dtypes.int64),
@@ -12,17 +16,23 @@ def model(training_data, validation_data, epochs):
 
 	model = tf.keras.models.Sequential()
 	model.add(tf.keras.layers.DenseFeatures(feature_columns))
-	model.add(tf.keras.layers.Dense(1024, activation=tf.nn.relu))
-	model.add(tf.keras.layers.Dense(512, activation=tf.nn.relu))
 
-	model.add(tf.keras.layers.Dropout(0.4))
+	model.add(tf.keras.layers.Dense(1024, input_shape=(770,), activation=tf.nn.relu))
+	model.add(tf.keras.layers.Dense(1024, activation=tf.nn.relu))
+	
+	model.add(tf.keras.layers.Dropout(0.2))
+
 	model.add(tf.keras.layers.Dense(1, activation=tf.nn.sigmoid))
 
-	model.compile(optimizer='adam',
+	model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=10E-6),
 				  loss='binary_crossentropy',
 				  metrics=['accuracy', tf.metrics.Recall(), tf.metrics.Precision()])
 
-	model.fit(training_data, validation_data=validation_data, epochs=epochs)
+	model.fit(training_data,
+			  validation_data=validation_data,
+			  epochs=epochs,
+			  callbacks=[tensorboard])
+
 	return model
 
 
@@ -135,7 +145,10 @@ if __name__ == '__main__':
 
 	# create and train the model
 	model = model(train_ds, val_ds, args.epochs)
-	model.save('my_first_model.model')
 
-	# evaluate model
-	model.evaluate(test_ds)
+	model.summary()
+
+	model.save('blunder-predictor.model')
+
+	# # evaluate model
+	# model.evaluate(test_ds)
