@@ -3,9 +3,10 @@ from tensorflow.keras.callbacks import TensorBoard
 import numpy as np
 import argparse
 import time
+import os
 
 
-def model(training_data, validation_data, dense_layers, num_nodes, epochs, learning_rate, callback=None):
+def model(training_data, validation_data, dense_layers, num_nodes, epochs, learning_rate, dropout, callback=None):
 	feature_columns = [
 		tf.feature_column.numeric_column('position', shape=(1, 8, 8, 12), dtype=tf.dtypes.int64),
 		tf.feature_column.numeric_column('turn', shape=(1,), dtype=tf.dtypes.int64),
@@ -18,7 +19,7 @@ def model(training_data, validation_data, dense_layers, num_nodes, epochs, learn
 	for i in range(dense_layers):
 		model.add(tf.keras.layers.Dense(num_nodes, activation=tf.nn.relu))
 
-	model.add(tf.keras.layers.Dropout(0.2))
+	model.add(tf.keras.layers.Dropout(dropout))
 
 	model.add(tf.keras.layers.Dense(1, activation=tf.nn.sigmoid))
 
@@ -118,15 +119,22 @@ def load_local_training_data():
 def parse_args():
 	parser = argparse.ArgumentParser()
 
+	parser.add_argument('--local', type=bool, default=False)
+
 	parser.add_argument('--batch-size', type=int, default=1000)
 	parser.add_argument('--epochs', type=int, default=10)
 	parser.add_argument('--parts', type=str, default='3')
-	parser.add_argument('--learning-rate', type=int, default=.00001)
+	parser.add_argument('--learning-rate', type=float, default=.00001)
 	parser.add_argument('--dense-layers', type=int, default=2)
 	parser.add_argument('--num-nodes', type=int, default=1024)
-
-	parser.add_argument('--train', type=str)
+	parser.add_argument('--dropout', type=float, default=0.2)
 	parser.add_argument('--tensorboard', type=bool, default=False)
+
+	parser.add_argument('--model_dir', type=str)
+	parser.add_argument('--train', type=str)
+
+	parser.add_argument('--current_host', type=str)
+	parser.add_argument('--hosts', type=list)
 
 	return parser.parse_args()
 
@@ -135,7 +143,7 @@ if __name__ == '__main__':
 	args = parse_args()
 
 	# load all datasets
-	if args.train is None:
+	if args.local:
 		train_ds, val_ds, test_ds = load_local_training_data()
 	else:
 		train_ds, val_ds, test_ds = load_remote_training_data(args.train, int(args.parts))
@@ -155,11 +163,16 @@ if __name__ == '__main__':
 		callbacks = None
 
 	# create and train the model
-	model = model(train_ds, val_ds, args.dense_layers, args.num_nodes, args.epochs, args.learning_rate, callbacks)
+	model = model(train_ds, val_ds, args.dense_layers, args.num_nodes, args.epochs, args.learning_rate, args.dropout, callbacks)
+	
+	# evaluate model
+	model.evaluate(test_ds)
 
 	model.summary()
 
-	model.save('blunder-predictor.model')
+	if args.sm_model_dir is not None:
+		if args.current_host == args.hosts[0]:
+			model.save(os.path.join(args.sm_model_dir, str(int(time.time()))), 'blunder-predictor.model')
 
-	# evaluate model
-	model.evaluate(test_ds)
+	elif args.sm_model_dir is None:
+		model.save('blunder-predictor.model')
