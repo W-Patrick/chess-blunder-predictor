@@ -1,8 +1,9 @@
 import tensorflow as tf
 import numpy as np
+import argparse
 
 
-def model(training_data, validation_data):
+def model(training_data, validation_data, epochs):
 	feature_columns = [
 		tf.feature_column.numeric_column('position', shape=(1, 8, 8, 12), dtype=tf.dtypes.int64),
 		tf.feature_column.numeric_column('turn', shape=(1,), dtype=tf.dtypes.int64),
@@ -12,18 +13,18 @@ def model(training_data, validation_data):
 	model = tf.keras.models.Sequential()
 	model.add(tf.keras.layers.DenseFeatures(feature_columns))
 	model.add(tf.keras.layers.Dense(1024, activation=tf.nn.relu))
-	model.add(tf.keras.layers.Dense(1024, activation=tf.nn.relu))
+	model.add(tf.keras.layers.Dense(512, activation=tf.nn.relu))
+
+	model.add(tf.keras.layers.Dropout(0.4))
 	model.add(tf.keras.layers.Dense(1, activation=tf.nn.sigmoid))
 
 	model.compile(optimizer='adam',
 				  loss='binary_crossentropy',
 				  metrics=['accuracy', tf.metrics.Recall(), tf.metrics.Precision()])
 
-	model.fit(training_data, validation_data=validation_data, epochs=5)
+	model.fit(training_data, validation_data=validation_data, epochs=epochs)
 	return model
 
-def load_training_data(path):
-	pass
 
 def _parse_function(raw_data):
 	feature_description = {
@@ -47,27 +48,94 @@ def _parse_function(raw_data):
 	return dict({'position': [position], 'elo': [elo], 'turn': [turn]}), [label]
 
 
-if __name__ == '__main__':
-	filenames = ['input-medium/part-r-00000']
-	raw_dataset = tf.data.TFRecordDataset(filenames)
+def load_datasets(training_data_paths, validation_data_paths, test_data_paths):
+	raw_dataset = tf.data.TFRecordDataset(training_data_paths)
+	train_ds = raw_dataset.map(_parse_function)
+	train_ds = train_ds.shuffle(buffer_size=256)
 
-	dataset = raw_dataset.map(_parse_function)
-
-	dataset = dataset.shuffle(buffer_size=256).batch(32)
-
-	raw_validation_set = tf.data.TFRecordDataset('input-medium/part-r-00001')
+	raw_validation_set = tf.data.TFRecordDataset(validation_data_paths)
 	val_ds = raw_validation_set.map(_parse_function)
-	val_ds = dataset.shuffle(buffer_size=256)
+	val_ds = val_ds.shuffle(buffer_size=256)
 
-	raw_test_dataset = tf.data.TFRecordDataset('input-medium/part-r-00002')
+	raw_test_dataset = tf.data.TFRecordDataset(test_data_paths)
 	test_ds = raw_test_dataset.map(_parse_function)
-	test_ds = dataset.shuffle(buffer_size=256)
+	test_ds = test_ds.shuffle(buffer_size=256)
 
-	model = model(dataset, val_ds)
+	return train_ds, val_ds, test_ds
+
+
+def download_part(part, s3_url, namespace):
+	part_prefix = 'part-r-'
+	part_suffix = str(part)
+	while len(part_suffix) < 5: part_suffix = '0' + part_suffix
+	part_file = part_prefix + part_suffix
+
+	url = '{}/{}'.format(s3_url, part_file)
+	file_path = tf.keras.utils.get_file('{}.{}'.format(namespace, part_file), url)
+	return file_path
+
+
+def load_remote_training_data(s3_url, parts, namespace='main'):
+	if parts < 3:
+		raise ValueError('There must be at least 3 parts in the dataset')
+
+	test_part = parts - 1
+	val_part = parts - 2
+	test_parts = range(parts - 2)
+
+	training_data = []
+	for part in test_parts:
+		file_path = download_part(part, s3_url, namespace)
+		training_data.append(file_path)
+
+	validation_data = []
+	val_file_path = download_part(val_part, s3_url, namespace)
+	validation_data.append(val_file_path)
+
+	test_data = []
+	test_file_path = download_part(test_part, s3_url, namespace)
+	test_data.append(test_file_path)
+
+	return load_datasets(training_data, validation_data, test_data)
+
+
+def load_local_training_data():
+	training_data_files = ['input-medium/part-r-00000']
+	validation_data_files = ['input-medium/part-r-00001']
+	test_data_files = ['input-medium/part-r-00002']
+
+	return load_datasets(training_data_files, validation_data_files, test_data_files)
+
+
+def parse_args():
+	parser = argparse.ArgumentParser()
+
+	parser.add_argument('--batch-size', type=int, default=32)
+	parser.add_argument('--epochs', type=int, default=5)
+	parser.add_argument('--train', type=str)
+
+	parser.add_argument('--hyperparameters', type=dict, default={'parts': '3'})
+
+	return parser.parse_args()
+
+
+if __name__ == '__main__':
+	args = parse_args()
+
+	# load all datasets
+	if args.train is None:
+		train_ds, val_ds, test_ds = load_local_training_data()
+	else:
+		train_ds, val_ds, test_ds = load_remote_training_data(args.train, int(args.hyperparameters['parts']))
+
+	# batch the datasets
+	train_ds = train_ds.batch(args.batch_size)
+	val_ds = val_ds.batch(args.batch_size)
+	test_ds = test_ds.batch(args.batch_size)
+
+	# create and train the model
+	model = model(train_ds, val_ds, args.epochs)
 	model.save('my_first_model.model')
 
-	loss, accuracy, recall, precision = model.evaluate(test_ds, verbose=0)
-	print('Loss: {}'.format(loss))
-	print('Accuracy: {}'.format(accuracy))
-	print('Recall: {}'.format(recall))
-	print('Precision: {}'.format(precision))
+	# evaluate model
+	model.evaluate(test_ds)
