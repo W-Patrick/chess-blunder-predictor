@@ -5,6 +5,7 @@ import argparse
 import time
 import os
 import json
+import math
 
 
 def model(training_data, validation_data, dense_layers, num_nodes, epochs, learning_rate, dropout, callback=None):
@@ -95,22 +96,32 @@ def load_remote_training_data(s3_url, parts, aws, namespace='main'):
 	if parts < 3:
 		raise ValueError('There must be at least 3 parts in the dataset')
 
-	test_part = parts - 1
-	val_part = parts - 2
-	test_parts = range(parts - 2)
+	training_split = .7
+
+	training_parts_upper = int(parts * training_split)
+	train_parts = range(training_parts_upper)
+
+	remaining_parts = parts - len(train_parts)
+	num_validation_parts = math.ceil(remaining_parts / 2)
+	validation_parts_upper = training_parts_upper + num_validation_parts
+
+	val_parts = range(training_parts_upper, validation_parts_upper)
+	test_parts = range(validation_parts_upper, parts)
 
 	training_data = []
-	for part in test_parts:
+	for part in train_parts:
 		file_path = load_part(part, s3_url, aws, namespace)
 		training_data.append(file_path)
 
 	validation_data = []
-	val_file_path = load_part(val_part, s3_url, aws, namespace)
-	validation_data.append(val_file_path)
+	for part in val_parts:
+		val_file_path = load_part(part, s3_url, aws, namespace)
+		validation_data.append(val_file_path)
 
 	test_data = []
-	test_file_path = load_part(test_part, s3_url, aws, namespace)
-	test_data.append(test_file_path)
+	for part in test_parts:
+		test_file_path = load_part(part, s3_url, aws, namespace)
+		test_data.append(test_file_path)
 
 	return load_datasets(training_data, validation_data, test_data)
 
