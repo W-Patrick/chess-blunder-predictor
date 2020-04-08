@@ -1,5 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras.callbacks import TensorBoard
+from tensorflow.keras.callbacks import TensorBoard, EarlyStopping, ModelCheckpoint
 import numpy as np
 import argparse
 import time
@@ -126,6 +126,11 @@ def load_remote_training_data(s3_url, parts, aws, namespace='main'):
 	return load_datasets(training_data, validation_data, test_data)
 
 
+def evaluate_model(model, test_ds, model_name='model'):
+	test_loss, test_acc, test_recall, test_precision = model.evaluate(test_ds)
+	print('{}: test_loss={} test_acc={} test_recall={} test_precision={}\n'.format(model_name, test_loss, test_acc, test_recall, test_precision))
+
+
 def parse_args():
 	parser = argparse.ArgumentParser()
 
@@ -146,11 +151,19 @@ def parse_args():
 	parser.add_argument('--hosts', type=list, default=json.loads(os.environ.get('SM_HOSTS')) if 'SM_HOSTS' in os.environ else None)
 	parser.add_argument('--current-host', type=str, default=os.environ.get('SM_CURRENT_HOST') if 'SM_CURRENT_HOST' in os.environ else None)
 
+	parser.add_argument('--early-stopping', type=bool, default=False)
+	parser.add_argument('--patience', type=int, default=100)
+
 	return parser.parse_args()
 
 
 if __name__ == '__main__':
 	args = parse_args()
+
+	model_output_dir = args.sm_model_dir if args.sm_model_dir is not None else 'models'
+	model_output_fp = os.path.join(model_output_dir, 'blunder-predictor.h5')
+	model_best_acc_fp = os.path.join(model_output_dir, 'best-accuracy.h5')
+	model_best_recall_fp = os.path.join(model_output_dir, 'best-recall.h5')
 
 	# need to check the environment variables here because they are slightly different depending
 	# on whether you are running a regular training or a tuning job
@@ -172,27 +185,42 @@ if __name__ == '__main__':
 	val_ds = val_ds.batch(args.batch_size)
 	test_ds = test_ds.batch(args.batch_size)
 
+	# define callbacks
+	callbacks = []
+
+	if args.early_stopping:
+		early_stopping = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=args.patience)
+		
+		accuracy_checkpoint = ModelCheckpoint(
+			model_best_acc_fp, monitor='val_accuracy', mode='max', verbose=1, save_best_only=True) 
+
+		recall_checkpoint = ModelCheckpoint(
+			model_best_recall_fp, monitor='val_recall', mode='max', verbose=1, save_best_only=True)
+
+		callbacks.append(early_stopping)
+		callbacks.append(accuracy_checkpoint)
+		callbacks.append(recall_checkpoint)
+
 	if args.tensorboard:
 		name = 'ITERATION-6-HYPERTUNING-blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}'.format(
 			args.batch_size, args.dense_layers, args.num_nodes, args.dropout, args.learning_rate, int(time.time()))
 
 		tensorboard = TensorBoard(log_dir='C:\\logs\\{}'.format(name))
-		callbacks = [tensorboard]
-	else:
-		callbacks = None
+		callbacks.append(tensorboard)
 
 	# create and train the model
 	model = model(train_ds, val_ds, args.dense_layers, args.num_nodes, args.epochs, args.learning_rate, args.dropout, callbacks)
 	
-	# evaluate model
-	test_loss, test_acc, test_recall, test_precision = model.evaluate(test_ds)
-	print('test_acc={} '.format(test_acc))
+	if args.early_stopping:
+		# load models and evaluate
+		acc_model = tf.keras.models.load_model(model_best_acc_fp)
+		recall_model = tf.keras.models.load_model(model_best_recall_fp)
 
-	model.summary()
-
-	if args.model_dir is not None:
-		if args.current_host == args.hosts[0]:
-			model.save(os.path.join(args.sm_model_dir, str(int(time.time()))), 'blunder-predictor.model')
-
-	elif args.model_dir is None:
-		model.save('blunder-predictor.model')
+		evaluate_model(acc_model, test_ds, 'acc_model')
+		evaluate_model(recall_model, test_ds, 'recall_model')
+	else:
+		# evaluate model
+		evaluate_model(model, test_ds)
+	
+	# save the final model
+	model.save(model_output_fp)
