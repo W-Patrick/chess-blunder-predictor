@@ -139,7 +139,7 @@ def parse_args():
 
 	parser.add_argument('--model_dir', type=str)
 	parser.add_argument('--sm-model-dir', type=str, default=os.environ.get('SM_MODEL_DIR') if 'SM_MODEL_DIR' in os.environ else None)
-	parser.add_argument('--train', type=str, default=os.environ.get('SM_CHANNEL_TRAINING') if 'SM_CHANNEL_TRAINING' in os.environ else None)
+	parser.add_argument('--train', type=str)
 	parser.add_argument('--hosts', type=list, default=json.loads(os.environ.get('SM_HOSTS')) if 'SM_HOSTS' in os.environ else None)
 	parser.add_argument('--current-host', type=str, default=os.environ.get('SM_CURRENT_HOST') if 'SM_CURRENT_HOST' in os.environ else None)
 
@@ -149,8 +149,20 @@ def parse_args():
 if __name__ == '__main__':
 	args = parse_args()
 
+	# need to check the environment variables here because they are slightly different depending
+	# on whether you are running a regular training or a tuning job
+	if args.train is None:
+		if 'SM_CHANNEL_TRAINING' in os.environ:
+			train = os.environ.get('SM_CHANNEL_TRAINING')
+		elif 'SM_CHANNEL_TRAIN' in os.environ:
+			train = os.environ.get('SM_CHANNEL_TRAIN')
+		else:
+			train = args.train
+	else:
+		train = args.train
+
 	# load all datasets
-	train_ds, val_ds, test_ds = load_remote_training_data(args.train, int(args.parts), args.aws)
+	train_ds, val_ds, test_ds = load_remote_training_data(train, int(args.parts), args.aws)
 
 	# batch the datasets
 	train_ds = train_ds.batch(args.batch_size)
@@ -158,7 +170,7 @@ if __name__ == '__main__':
 	test_ds = test_ds.batch(args.batch_size)
 
 	if args.tensorboard:
-		name = 'LARGE-SET-blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}'.format(
+		name = 'ITERATION-2-HYPERTUNING-blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}'.format(
 			args.batch_size, args.dense_layers, args.num_nodes, args.dropout, args.learning_rate, int(time.time()))
 
 		tensorboard = TensorBoard(log_dir='C:\\logs\\{}'.format(name))
@@ -170,7 +182,8 @@ if __name__ == '__main__':
 	model = model(train_ds, val_ds, args.dense_layers, args.num_nodes, args.epochs, args.learning_rate, args.dropout, callbacks)
 	
 	# evaluate model
-	model.evaluate(test_ds)
+	test_loss, test_acc, test_recall, test_precision = model.evaluate(test_ds)
+	print('test_acc={} '.format(test_acc))
 
 	model.summary()
 
