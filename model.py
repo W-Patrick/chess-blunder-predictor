@@ -115,14 +115,6 @@ def load_remote_training_data(s3_url, parts, aws, namespace='main'):
 	return load_datasets(training_data, validation_data, test_data)
 
 
-def load_local_training_data():
-	training_data_files = ['input-medium/part-r-00000']
-	validation_data_files = ['input-medium/part-r-00001']
-	test_data_files = ['input-medium/part-r-00002']
-
-	return load_datasets(training_data_files, validation_data_files, test_data_files)
-
-
 def parse_args():
 	parser = argparse.ArgumentParser()
 
@@ -170,7 +162,7 @@ if __name__ == '__main__':
 	test_ds = test_ds.batch(args.batch_size)
 
 	if args.tensorboard:
-		name = 'ITERATION-2-HYPERTUNING-blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}'.format(
+		name = 'ITERATION-6-HYPERTUNING-blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}'.format(
 			args.batch_size, args.dense_layers, args.num_nodes, args.dropout, args.learning_rate, int(time.time()))
 
 		tensorboard = TensorBoard(log_dir='C:\\logs\\{}'.format(name))
