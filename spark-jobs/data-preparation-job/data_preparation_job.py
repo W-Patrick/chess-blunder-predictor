@@ -192,4 +192,4 @@ if __name__ == '__main__':
 	res = text_file.map(fix_record).flatMap(label_game)
 
 	df = sqlContext.createDataFrame(res, ['position', 'turn', 'elo', 'label'])
-	df.write.format("tfrecords").mode("overwrite").save(output_dir)
+	df.write.format("tfrecords").option("codec", "org.apache.hadoop.io.compress.GzipCodec").mode("overwrite").save(output_dir)
