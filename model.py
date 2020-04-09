@@ -77,11 +77,13 @@ def load_datasets(training_data_paths, validation_data_paths, test_data_paths, c
 	return train_ds, val_ds, test_ds
 
 
-def load_part(part, s3_url, aws, namespace):
+def load_part(part, s3_url, aws, namespace, compressed):
 	part_prefix = 'part-r-'
 	part_suffix = str(part)
 	while len(part_suffix) < 5: part_suffix = '0' + part_suffix
 	part_file = part_prefix + part_suffix
+	if compressed:
+		part_file += '.gz'
 
 	url = '{}/{}'.format(s3_url, part_file)
 
@@ -112,17 +114,17 @@ def load_remote_training_data(s3_url, parts, aws, namespace='main', compressed=T
 
 	training_data = []
 	for part in train_parts:
-		file_path = load_part(part, s3_url, aws, namespace)
+		file_path = load_part(part, s3_url, aws, namespace, compressed)
 		training_data.append(file_path)
 
 	validation_data = []
 	for part in val_parts:
-		val_file_path = load_part(part, s3_url, aws, namespace)
+		val_file_path = load_part(part, s3_url, aws, namespace, compressed)
 		validation_data.append(val_file_path)
 
 	test_data = []
 	for part in test_parts:
-		test_file_path = load_part(part, s3_url, aws, namespace)
+		test_file_path = load_part(part, s3_url, aws, namespace, compressed)
 		test_data.append(test_file_path)
 
 	return load_datasets(training_data, validation_data, test_data, compressed)
