@@ -59,16 +59,18 @@ def _parse_function(raw_data):
 	return dict({'position': [position], 'elo': [elo], 'turn': [turn]}), [label]
 
 
-def load_datasets(training_data_paths, validation_data_paths, test_data_paths):
-	raw_dataset = tf.data.TFRecordDataset(training_data_paths)
+def load_datasets(training_data_paths, validation_data_paths, test_data_paths, compressed):
+	compression_type = 'GZIP' if compressed else None
+
+	raw_dataset = tf.data.TFRecordDataset(training_data_paths, compression_type=compression_type)
 	train_ds = raw_dataset.map(_parse_function)
 	train_ds = train_ds.shuffle(buffer_size=256)
 
-	raw_validation_set = tf.data.TFRecordDataset(validation_data_paths)
+	raw_validation_set = tf.data.TFRecordDataset(validation_data_paths, compression_type=compression_type)
 	val_ds = raw_validation_set.map(_parse_function)
 	val_ds = val_ds.shuffle(buffer_size=256)
 
-	raw_test_dataset = tf.data.TFRecordDataset(test_data_paths)
+	raw_test_dataset = tf.data.TFRecordDataset(test_data_paths, compression_type=compression_type)
 	test_ds = raw_test_dataset.map(_parse_function)
 	test_ds = test_ds.shuffle(buffer_size=256)
 
@@ -92,7 +94,7 @@ def load_part(part, s3_url, aws, namespace):
 	return file_path
 
 
-def load_remote_training_data(s3_url, parts, aws, namespace='main'):
+def load_remote_training_data(s3_url, parts, aws, namespace='main', compressed=True):
 	if parts < 3:
 		raise ValueError('There must be at least 3 parts in the dataset')
 
@@ -123,7 +125,7 @@ def load_remote_training_data(s3_url, parts, aws, namespace='main'):
 		test_file_path = load_part(part, s3_url, aws, namespace)
 		test_data.append(test_file_path)
 
-	return load_datasets(training_data, validation_data, test_data)
+	return load_datasets(training_data, validation_data, test_data, compressed)
 
 
 def evaluate_model(model, test_ds, model_name='model'):
@@ -154,8 +156,11 @@ def parse_args():
 	parser.add_argument('--early-stopping', type=bool, default=False)
 	parser.add_argument('--patience', type=int, default=100)
 
+	parser.add_argument('--compressed', type=bool, default=True)
+
 	return parser.parse_args()
 
+#raw_dataset = tf.data.TFRecordDataset(['part-r-00000.gz'], compression_type='GZIP')
 
 if __name__ == '__main__':
 	args = parse_args()
@@ -178,7 +183,7 @@ if __name__ == '__main__':
 		train = args.train
 
 	# load all datasets
-	train_ds, val_ds, test_ds = load_remote_training_data(train, int(args.parts), args.aws)
+	train_ds, val_ds, test_ds = load_remote_training_data(train, int(args.parts), args.aws, args.compressed)
 
 	# batch the datasets
 	train_ds = train_ds.batch(args.batch_size)
