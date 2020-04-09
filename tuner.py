@@ -8,9 +8,9 @@ training_command = 'python model.py --batch-size {} --epochs 15 --train "https:/
 # TRAIN AND OBSERVE
 dense_layers = [4]
 num_nodes = [2048]
-batch_sizes = [50, 100, 1000]
-learning_rates = [.000001, .0000001]
-dropouts = [0.2]
+batch_sizes = [50]
+learning_rates = [.0000001]
+dropouts = [0.0]
 
 for dense_layer in dense_layers:
 	for num_node in num_nodes:

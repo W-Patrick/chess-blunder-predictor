@@ -128,7 +128,7 @@ def load_remote_training_data(s3_url, parts, aws, namespace='main'):
 
 def evaluate_model(model, test_ds, model_name='model'):
 	test_loss, test_acc, test_recall, test_precision = model.evaluate(test_ds)
-	print('{}: test_loss={} test_acc={} test_recall={} test_precision={}\n'.format(model_name, test_loss, test_acc, test_recall, test_precision))
+	print('\n{}: test_loss={} test_acc={} test_recall={} test_precision={}\n'.format(model_name, test_loss, test_acc, test_recall, test_precision))
 
 
 def parse_args():
@@ -161,9 +161,9 @@ if __name__ == '__main__':
 	args = parse_args()
 
 	model_output_dir = args.sm_model_dir if args.sm_model_dir is not None else 'models'
-	model_output_fp = os.path.join(model_output_dir, 'blunder-predictor.h5')
-	model_best_acc_fp = os.path.join(model_output_dir, 'best-accuracy.h5')
-	model_best_recall_fp = os.path.join(model_output_dir, 'best-recall.h5')
+	model_output_fp = os.path.join(model_output_dir, 'blunder-predictor.model')
+	model_best_acc_fp = os.path.join(model_output_dir, 'best-accuracy.model')
+	model_best_recall_fp = os.path.join(model_output_dir, 'best-recall.model')
 
 	# need to check the environment variables here because they are slightly different depending
 	# on whether you are running a regular training or a tuning job
@@ -189,6 +189,7 @@ if __name__ == '__main__':
 	callbacks = []
 
 	if args.early_stopping:
+		print('EARLY STOPPING IS TURNED ON')
 		early_stopping = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=args.patience)
 		
 		accuracy_checkpoint = ModelCheckpoint(
@@ -202,7 +203,7 @@ if __name__ == '__main__':
 		callbacks.append(recall_checkpoint)
 
 	if args.tensorboard:
-		name = 'ITERATION-6-HYPERTUNING-blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}'.format(
+		name = 'ITERATION-7-HYPERTUNING-blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}'.format(
 			args.batch_size, args.dense_layers, args.num_nodes, args.dropout, args.learning_rate, int(time.time()))
 
 		tensorboard = TensorBoard(log_dir='C:\\logs\\{}'.format(name))
