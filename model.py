@@ -6,9 +6,11 @@ import time
 import os
 import json
 import math
+import tarfile
+import requests
 
 
-def model(training_data, validation_data, dense_layers, num_nodes, epochs, learning_rate, dropout, callback=None):
+def model(training_data, validation_data, dense_layers, num_nodes, epochs, learning_rate, dropout, callbacks=None):
 	feature_columns = [
 		tf.feature_column.numeric_column('position', shape=(1, 8, 8, 12), dtype=tf.dtypes.int64),
 		tf.feature_column.numeric_column('turn', shape=(1,), dtype=tf.dtypes.int64),
@@ -159,6 +161,8 @@ def parse_args():
 	parser.add_argument('--patience', type=int, default=100)
 
 	parser.add_argument('--compressed', type=bool, default=True)
+	parser.add_argument('--continue-training', type=bool, default=False)
+	parser.add_argument('--model-location', type=str)
 
 	return parser.parse_args()
 
@@ -210,15 +214,32 @@ if __name__ == '__main__':
 		callbacks.append(recall_checkpoint)
 
 	if args.tensorboard:
-		name = 'ITERATION-7-HYPERTUNING-blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}'.format(
+		name = 'blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}'.format(
 			args.batch_size, args.dense_layers, args.num_nodes, args.dropout, args.learning_rate, int(time.time()))
 
 		tensorboard = TensorBoard(log_dir='C:\\logs\\{}'.format(name))
 		callbacks.append(tensorboard)
 
-	# create and train the model
-	model = model(train_ds, val_ds, args.dense_layers, args.num_nodes, args.epochs, args.learning_rate, args.dropout, callbacks)
+	if args.continue_training:
+		if args.model_location is None:
+			raise ValueError('You need to specify a model location to continue training')
+
+		print('Downloading: {}'.format(args.model_location))
+		tarred_model = requests.get(args.model_location)
+		open('models.tar.gz', 'wb').write(tarred_model.content)
+
+		tarfile.open('models.tar.gz').extractall()
 	
+		model = tf.keras.models.load_model('best-accuracy.model')
+
+		model.fit(train_ds,
+			validation_data=val_ds,
+			epochs=args.epochs,
+			callbacks=callbacks)
+	else:
+		# create and train the model
+		model = model(train_ds, val_ds, args.dense_layers, args.num_nodes, args.epochs, args.learning_rate, args.dropout, callbacks)
+		
 	if args.early_stopping:
 		# load models and evaluate
 		acc_model = tf.keras.models.load_model(model_best_acc_fp)
