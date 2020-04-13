@@ -10,7 +10,11 @@ import tarfile
 import requests
 
 
-def model(training_data, validation_data, dense_layers, num_nodes, epochs, learning_rate, dropout, callbacks=None):
+def sigmoid_loss_with_weight(labels, logits, pos_weight):
+	return tf.nn.weighted_cross_entropy_with_logits(labels, logits, pos_weight)
+
+
+def model(training_data, validation_data, dense_layers, num_nodes, epochs, learning_rate, dropout, weighted_loss=False, weight=1.0, callbacks=None):
 	feature_columns = [
 		tf.feature_column.numeric_column('position', shape=(1, 8, 8, 12), dtype=tf.dtypes.int64),
 		tf.feature_column.numeric_column('turn', shape=(1,), dtype=tf.dtypes.int64),
@@ -27,9 +31,14 @@ def model(training_data, validation_data, dense_layers, num_nodes, epochs, learn
 
 	model.add(tf.keras.layers.Dense(1, activation=tf.nn.sigmoid))
 
-	model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-				  loss='binary_crossentropy',
-				  metrics=['accuracy', tf.metrics.Recall(), tf.metrics.Precision()])
+	if weighted_loss:
+		model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+					  loss=lambda labels, logits: sigmoid_loss_with_weight(labels, logits, weight),
+					  metrics=['accuracy', tf.metrics.Recall(), tf.metrics.Precision()])
+	else:
+		model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+					  loss='binary_crossentropy',
+					  metrics=['accuracy', tf.metrics.Recall(), tf.metrics.Precision()])
 
 	model.fit(training_data,
 			  validation_data=validation_data,
@@ -56,7 +65,7 @@ def _parse_function(raw_data):
 
 	turn = example['turn']
 	elo = example['elo']
-	label = example['label']
+	label = tf.cast(example['label'], tf.float32)
 
 	return dict({'position': [position], 'elo': [elo], 'turn': [turn]}), [label]
 
@@ -164,9 +173,11 @@ def parse_args():
 	parser.add_argument('--continue-training', type=bool, default=False)
 	parser.add_argument('--model-location', type=str)
 
+	parser.add_argument('--weighted-loss', type=bool, default=False)
+	parser.add_argument('--weight', type=float, default=1.0)
+
 	return parser.parse_args()
 
-#raw_dataset = tf.data.TFRecordDataset(['part-r-00000.gz'], compression_type='GZIP')
 
 if __name__ == '__main__':
 	args = parse_args()
@@ -214,8 +225,8 @@ if __name__ == '__main__':
 		callbacks.append(recall_checkpoint)
 
 	if args.tensorboard:
-		name = 'blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}'.format(
-			args.batch_size, args.dense_layers, args.num_nodes, args.dropout, args.learning_rate, int(time.time()))
+		name = 'blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}-weighted_loss-{}-weight{}'.format(
+			args.batch_size, args.dense_layers, args.num_nodes, args.dropout, args.learning_rate, args.weighted_loss, args.weight, int(time.time()))
 
 		tensorboard = TensorBoard(log_dir='C:\\logs\\{}'.format(name))
 		callbacks.append(tensorboard)
@@ -238,7 +249,7 @@ if __name__ == '__main__':
 			callbacks=callbacks)
 	else:
 		# create and train the model
-		model = model(train_ds, val_ds, args.dense_layers, args.num_nodes, args.epochs, args.learning_rate, args.dropout, callbacks)
+		model = model(train_ds, val_ds, args.dense_layers, args.num_nodes, args.epochs, args.learning_rate, args.dropout, args.weighted_loss, args.weight, callbacks)
 		
 	if args.early_stopping:
 		# load models and evaluate
