@@ -205,7 +205,7 @@ if __name__ == '__main__':
 	else:
 		train = args.train
 
-	split_train_name = args.train.split('/')
+	split_train_name = train.split('/')
 	namespace = 'main' if len(split_train_name) == 0 else split_train_name[len(split_train_name) - 1]
 	# load all datasets
 	train_ds, val_ds, test_ds = load_remote_training_data(train, int(args.parts), args.aws, namespace=namespace, compressed=args.compressed)
