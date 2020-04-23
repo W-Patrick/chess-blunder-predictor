@@ -14,6 +14,17 @@ def sigmoid_loss_with_weight(labels, logits, pos_weight):
 	return tf.nn.weighted_cross_entropy_with_logits(labels, logits, pos_weight)
 
 
+def compile_model(model, weighted_loss, weight, learning_rate):
+	if weighted_loss:
+		model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+					  loss=lambda labels, logits: sigmoid_loss_with_weight(labels, logits, weight),
+					  metrics=['accuracy', tf.metrics.Recall(), tf.metrics.Precision()])
+	else:
+		model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+					  loss='binary_crossentropy',
+					  metrics=['accuracy', tf.metrics.Recall(), tf.metrics.Precision()])
+
+
 def model(training_data, validation_data, dense_layers, num_nodes, epochs, learning_rate, dropout, weighted_loss=False, weight=1.0, callbacks=None):
 	feature_columns = [
 		tf.feature_column.numeric_column('position', shape=(1, 8, 8, 12), dtype=tf.dtypes.int64),
@@ -31,14 +42,7 @@ def model(training_data, validation_data, dense_layers, num_nodes, epochs, learn
 
 	model.add(tf.keras.layers.Dense(1, activation=tf.nn.sigmoid))
 
-	if weighted_loss:
-		model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-					  loss=lambda labels, logits: sigmoid_loss_with_weight(labels, logits, weight),
-					  metrics=['accuracy', tf.metrics.Recall(), tf.metrics.Precision()])
-	else:
-		model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
-					  loss='binary_crossentropy',
-					  metrics=['accuracy', tf.metrics.Recall(), tf.metrics.Precision()])
+	compile_model(model, weighted_loss, weight, learning_rate)
 
 	model.fit(training_data,
 			  validation_data=validation_data,
@@ -172,6 +176,7 @@ def parse_args():
 	parser.add_argument('--compressed', type=bool, default=True)
 	parser.add_argument('--continue-training', type=bool, default=False)
 	parser.add_argument('--model-location', type=str)
+	parser.add_argument('--model-name', type=str)
 
 	parser.add_argument('--weighted-loss', type=bool, default=False)
 	parser.add_argument('--weight', type=float, default=1.0)
@@ -186,6 +191,7 @@ if __name__ == '__main__':
 	model_output_fp = os.path.join(model_output_dir, 'blunder-predictor.model')
 	model_best_acc_fp = os.path.join(model_output_dir, 'best-accuracy.model')
 	model_best_recall_fp = os.path.join(model_output_dir, 'best-recall.model')
+	model_best_precision_fp = os.path.join(model_output_dir, 'best-precision.model')
 
 	# need to check the environment variables here because they are slightly different depending
 	# on whether you are running a regular training or a tuning job
@@ -199,8 +205,10 @@ if __name__ == '__main__':
 	else:
 		train = args.train
 
+	split_train_name = args.train.split('/')
+	namespace = 'main' if len(split_train_name) == 0 else split_train_name[len(split_train_name) - 1]
 	# load all datasets
-	train_ds, val_ds, test_ds = load_remote_training_data(train, int(args.parts), args.aws, args.compressed)
+	train_ds, val_ds, test_ds = load_remote_training_data(train, int(args.parts), args.aws, namespace=namespace, compressed=args.compressed)
 
 	# batch the datasets
 	train_ds = train_ds.batch(args.batch_size)
@@ -220,13 +228,17 @@ if __name__ == '__main__':
 		recall_checkpoint = ModelCheckpoint(
 			model_best_recall_fp, monitor='val_recall', mode='max', verbose=1, save_best_only=True)
 
+		precision_checkpoint = ModelCheckpoint(
+			model_best_precision_fp, monitor='val_precision', mode='max', verbose=1, save_best_only=True)
+
 		callbacks.append(early_stopping)
 		callbacks.append(accuracy_checkpoint)
 		callbacks.append(recall_checkpoint)
+		callbacks.append(precision_checkpoint)
 
 	if args.tensorboard:
-		name = 'blunder-predictor-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}-weighted_loss-{}-weight{}'.format(
-			args.batch_size, args.dense_layers, args.num_nodes, args.dropout, args.learning_rate, args.weighted_loss, args.weight, int(time.time()))
+		name = 'WEIGHT_REDUCTION_TRAINING-{}-batch-{}-dense-{}-nodes-{}-dropout-{}-learning-rate-{}-weighted_loss-{}-weight-{}-{}'.format(
+			args.batch_size, args.dense_layers, args.num_nodes, args.dropout, args.learning_rate, args.weighted_loss, args.weight, args.model_name, int(time.time()))
 
 		tensorboard = TensorBoard(log_dir='C:\\logs\\{}'.format(name))
 		callbacks.append(tensorboard)
@@ -241,7 +253,8 @@ if __name__ == '__main__':
 
 		tarfile.open('models.tar.gz').extractall()
 	
-		model = tf.keras.models.load_model('best-accuracy.model')
+		model = tf.keras.models.load_model(args.model_name)
+		compile_model(model, args.weighted_loss, args.weight, args.learning_rate)
 
 		model.fit(train_ds,
 			validation_data=val_ds,
