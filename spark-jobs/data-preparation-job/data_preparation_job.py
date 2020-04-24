@@ -68,7 +68,7 @@ TERMINATION = 'Termination'
 VARIANT = 'Variant'
 EVAL = 'eval'
 
-MIN_ELO = 1500
+MIN_ELO = 1200
 MAX_ELO = 2200
 
 BALANCE = True
